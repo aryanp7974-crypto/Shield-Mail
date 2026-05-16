@@ -1,0 +1,195 @@
+{
+  "name": "ShieldMail - Spam Detection",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [{ "mode": "everyMinute" }]
+        },
+        "filters": {},
+        "options": {
+          "dataPropertyName": "message"
+        }
+      },
+      "id": "node_gmail_trigger",
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "credentials": {
+        "gmailOAuth2": { "id": "1", "name": "Gmail OAuth2" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const msg = $input.first().json;\nconst subject = msg.subject || '(no subject)';\nconst body = msg.snippet || msg.text || msg.html || '';\nconst sender = msg.from || '';\nreturn [{ json: { subject, body, sender, messageId: msg.id, threadId: msg.threadId } }];"
+      },
+      "id": "node_extract_fields",
+      "name": "Extract Email Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"You are a spam detection AI. Analyze this email carefully.\\n\\nSubject: {{ $json.subject }}\\nSender: {{ $json.sender }}\\nBody: {{ $json.body }}\\n\\nClassify this email. Return ONLY a valid JSON object with no extra text, no markdown, no backticks:\\n{\\\"classification\\\": \\\"SPAM\\\" or \\\"CLEAN\\\", \\\"confidence\\\": number between 0-100, \\\"reason\\\": \\\"one line explanation\\\"}\"\n        }\n      ]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "node_gemini_classify",
+      "name": "Gemini Classify Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300],
+      "credentials": {
+        "httpQueryAuth": { "id": "2", "name": "Gemini API Key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst rawText = response.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\nconst cleaned = rawText.replace(/```json|```/g, '').trim();\ntry {\n  const parsed = JSON.parse(cleaned);\n  const prev = $('Extract Email Fields').first().json;\n  return [{ json: { ...prev, ...parsed } }];\n} catch(e) {\n  const prev = $('Extract Email Fields').first().json;\n  return [{ json: { ...prev, classification: 'CLEAN', confidence: 0, reason: 'Parse error - treated as clean' } }];\n}"
+      },
+      "id": "node_parse_response",
+      "name": "Parse Gemini Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.classification }}",
+              "operation": "equals",
+              "value2": "SPAM"
+            }
+          ]
+        }
+      },
+      "id": "node_if_spam",
+      "name": "Is Spam?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $json.messageId }}",
+        "labelIds": ["SPAM"],
+        "options": {}
+      },
+      "id": "node_gmail_label",
+      "name": "Move to Spam Folder",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [1340, 180],
+      "credentials": {
+        "gmailOAuth2": { "id": "1", "name": "Gmail OAuth2" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "mode": "url", "value": "YOUR_GOOGLE_SHEET_URL_HERE" },
+        "sheetName": { "mode": "name", "value": "Sheet1" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Timestamp": "={{ new Date().toISOString() }}",
+            "Sender": "={{ $json.sender }}",
+            "Subject": "={{ $json.subject }}",
+            "Classification": "={{ $json.classification }}",
+            "Confidence": "={{ $json.confidence }}",
+            "Reason": "={{ $json.reason }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node_sheets_log",
+      "name": "Log to Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1560, 180],
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "3", "name": "Google Sheets OAuth2" }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "YOUR_EMAIL@gmail.com",
+        "subject": "=🚨 Spam Detected: {{ $json.subject }}",
+        "emailType": "html",
+        "message": "=<h2>🚨 Spam Email Detected</h2><table border='1' cellpadding='8' style='border-collapse:collapse;font-family:sans-serif'><tr><td><b>Sender</b></td><td>{{ $json.sender }}</td></tr><tr><td><b>Subject</b></td><td>{{ $json.subject }}</td></tr><tr><td><b>Confidence</b></td><td>{{ $json.confidence }}%</td></tr><tr><td><b>Reason</b></td><td>{{ $json.reason }}</td></tr><tr><td><b>Time</b></td><td>{{ new Date().toLocaleString() }}</td></tr></table>",
+        "options": {}
+      },
+      "id": "node_notify_email",
+      "name": "Send Spam Alert",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [1780, 180],
+      "credentials": {
+        "gmailOAuth2": { "id": "1", "name": "Gmail OAuth2" }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "node_clean_stop",
+      "name": "Clean - No Action",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1340, 420]
+    }
+  ],
+  "connections": {
+    "Gmail Trigger": {
+      "main": [[{ "node": "Extract Email Fields", "type": "main", "index": 0 }]]
+    },
+    "Extract Email Fields": {
+      "main": [[{ "node": "Gemini Classify Email", "type": "main", "index": 0 }]]
+    },
+    "Gemini Classify Email": {
+      "main": [[{ "node": "Parse Gemini Response", "type": "main", "index": 0 }]]
+    },
+    "Parse Gemini Response": {
+      "main": [[{ "node": "Is Spam?", "type": "main", "index": 0 }]]
+    },
+    "Is Spam?": {
+      "main": [
+        [{ "node": "Move to Spam Folder", "type": "main", "index": 0 }],
+        [{ "node": "Clean - No Action", "type": "main", "index": 0 }]
+      ]
+    },
+    "Move to Spam Folder": {
+      "main": [[{ "node": "Log to Google Sheet", "type": "main", "index": 0 }]]
+    },
+    "Log to Google Sheet": {
+      "main": [[{ "node": "Send Spam Alert", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}
