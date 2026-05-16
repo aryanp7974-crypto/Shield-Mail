@@ -12,7 +12,7 @@
 
 ## 📌 Project Overview
 
-**Shield Mail** is a minor project for B.Tech CSE that automates Gmail inbox protection using AI. Every incoming email is analyzed by Groq's LLaMA 3.3 70B model and classified as `SPAM` or `CLEAN` with a confidence score and reason. Detected spam is automatically labeled, logged, and reported.
+**Shield Mail** is a project that automates Gmail inbox protection using AI. Every incoming email is analyzed by Groq's LLaMA 3.3 70B model and classified as `SPAM` or `CLEAN` with a confidence score and reason. Detected spam is automatically labeled, logged, and reported.
 
 ---
 
@@ -176,8 +176,7 @@ Wait ~60 seconds → check:
 
 ## 👨‍💻 Author
 
-**Aryan Patel**
-B.Tech CSE | Minor Project 2026
+**Aryan Pandey**
 GitHub: [@aryanp7974-crypto](https://github.com/aryanp7974-crypto)
 
 ---
