@@ -1,0 +1,30 @@
+# n8n local data
+.n8n/
+n8n-data/
+
+# Environment variables (NEVER commit API keys)
+.env
+.env.local
+*.env
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node modules
+node_modules/
+
+# Logs
+*.log
+logs/
+
+# Temp files
+*.tmp
+*.temp
+
+# API Keys / Credentials (safety net)
+credentials.json
+secrets.json
+*_credentials*
+*_secrets*
